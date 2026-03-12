@@ -1,0 +1,344 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  name           String
+  email          String    @unique
+  password       String
+  role           String    @default("student") // student, researcher, industry, government, admin
+  verified       Boolean   @default(false)
+  trustScore     Float     @default(0)
+  image          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  profile        Profile?
+  problems       Problem[]
+  submissions    Submission[]
+  jobs           Job[]
+  sentMessages   Message[]      @relation("SentMessages")
+  receivedMessages Message[]    @relation("ReceivedMessages")
+  verifications  Verification[]
+  engagementsAsCompany  Engagement[] @relation("CompanyEngagements")
+  engagementsAsStudent  Engagement[] @relation("StudentEngagements")
+  fraudReports   FraudReport[]  @relation("ReportedBy")
+  fraudReportsAgainst FraudReport[] @relation("ReportedAgainst")
+  adminActions   AdminAction[]
+  ratingsGiven   ProjectRating[] @relation("RaterRatings")
+  ratingsReceived ProjectRating[] @relation("RateeRatings")
+  certificates   Certificate[]
+}
+
+model Profile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bio                String?
+  phone              String?
+  location           String?
+  linkedinUrl        String?
+  githubUrl          String?
+  portfolioUrl       String?
+  skills             String   @default("[]") // JSON array of skills
+  avatarUrl          String?
+
+  // Student-specific
+  portfolioItems     String?  // JSON array of portfolio items
+  pastResearch       String?  // JSON array of past research entries
+  university         String?
+  department         String?
+  studentId          String?
+  gpa                Float?
+  graduationYear     Int?
+  availableForInternship Boolean @default(false)
+
+  researchInterests  String?
+  publications       String?
+  publicationCount   Int?
+  orcidId            String?
+  googleScholarUrl   String?
+  researchGateUrl    String?
+  hIndex             Int?
+  citationCount      Int?
+  supervisedStudents Int?
+  availableForConsulting Boolean @default(false)
+
+  companyName        String?
+  companySector      String?
+  companySize        String?
+  tradeLicenseNumber String?
+  website            String?
+  yearEstablished    Int?
+
+  standingBadge      String   @default("green") // green, yellow, red, banned
+
+  verificationStatus String  @default("pending") // pending, verified, rejected
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Problem {
+  id               String   @id @default(cuid())
+  companyId        String
+  company          User     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title            String
+  abstract         String
+  fullDescription  String
+  visibility       String   @default("public") // public, private, nda
+  bountyType       String?  // cash, certificate, none
+  bountyValue      String?
+  status           String   @default("open") // open, in_review, closed, archived
+  ipClauseAccepted Boolean  @default(true)
+  skills           String   @default("[]") // JSON array of required skills
+  sector           String?
+  deadline         DateTime?
+  submissions      Submission[]
+  engagements      Engagement[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Submission {
+  id              String   @id @default(cuid())
+  problemId       String
+  problem         Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description     String
+  fileUrl         String?
+  githubRepoUrl   String?
+  demoUrl         String?
+  ipAccepted      Boolean  @default(true)
+  status          String   @default("submitted") // submitted, shortlisted, accepted, rejected
+  score           Float?
+  feedback        String?
+  teamMembers     String?  // JSON array of team member names
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Engagement {
+  id                  String    @id @default(cuid())
+  problemId           String
+  problem             Problem   @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  companyId           String
+  company             User      @relation("CompanyEngagements", fields: [companyId], references: [id])
+  studentId           String
+  student             User      @relation("StudentEngagements", fields: [studentId], references: [id])
+  status              String    @default("negotiating") // negotiating, pending_deposit, active, closing, payment_released, closed, archived, cancelled
+
+  projectValueBdt     Float?
+  platformFeeRate     Float     @default(0.30)
+  depositAmountBdt    Float?
+  netStudentPayoutBdt Float?
+  namedContactPhone   String?
+  namedContactEmail   String?
+
+  negotiationRound    Int       @default(0) // 0 = no proposals yet, max 2 before admin binding
+  proposedBy          String?   // userId who last proposed milestones
+  adminProposedBinding Boolean  @default(false)
+
+  agreedAt            DateTime?
+  companyConfirmed    Boolean   @default(false)
+  studentConfirmed    Boolean   @default(false)
+  depositDeadline     DateTime?
+  depositConfirmedAt  DateTime?
+  completedAt         DateTime?
+  closedAt            DateTime?
+
+  agreementPdfUrl     String?
+  extensionsUsed      String    @default("{}") // JSON: milestoneId -> count
+
+  ratingByCompany     Int?
+  ratingByStudent     Int?
+  notes               String?
+
+  milestones          Milestone[]
+  disputes            Dispute[]
+  projectRatings      ProjectRating[]
+  certificates        Certificate[]
+  adminActions        AdminAction[]
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model Milestone {
+  id                     String    @id @default(cuid())
+  engagementId           String
+  engagement             Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  title                  String
+  description            String
+  dueDate                DateTime
+  submissionRequirements String?
+  order                  Int
+
+  deliverableUrl         String?
+  writtenNote            String?
+  isLate                 Boolean?
+  revisionCount          Int       @default(0)
+  autoCheckResult        String?   // JSON: { urlCheck, wordCount, isLate }
+
+  status                 String    @default("pending") // pending, submitted, under_review, approved, revision_requested, disputed
+
+  companyFeedback        String?
+  submittedAt            DateTime?
+  approvedAt             DateTime?
+  reviewDeadline         DateTime?
+  extensionsUsed         Int       @default(0)
+
+  tags                   MilestoneTag[]
+  disputes               Dispute[]
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
+model MilestoneTag {
+  id           String   @id @default(cuid())
+  milestoneId  String
+  milestone    Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  submittedBy  String   // userId who submitted the tags
+  taggedRole   String?  // "company" or "student"
+  targetUserId String?  // who is being tagged
+  tags         String   @default("[]") // JSON array of tag strings from fixed lists
+  overallTag   String?  // would_collaborate_again, would_not_recommend, neutral
+  skipped      Boolean  @default(false)
+
+  createdAt    DateTime @default(now())
+
+  @@unique([milestoneId, submittedBy])
+}
+
+model Dispute {
+  id             String    @id @default(cuid())
+  engagementId   String
+  engagement     Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  milestoneId    String?
+  milestone      Milestone? @relation(fields: [milestoneId], references: [id])
+
+  raisedById     String
+  raisedBy       String?   // display name or role
+  reason         String?
+  description    String?
+  status         String    @default("open") // open, resolved
+
+  adminId        String?
+  ruling         String?   // full_release, partial, refund
+  rulingPercent  Float?
+  rulingNotes    String?
+  resolvedAt     DateTime?
+
+  raisedAt       DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+}
+
+model AdminAction {
+  id           String   @id @default(cuid())
+  adminId      String
+  admin        User     @relation(fields: [adminId], references: [id])
+
+  actionType   String   // payment_confirmed, payment_released, quality_check, dispute_ruling, standing_override, deposit_confirmed
+  entityId     String
+  entityType   String   // engagement, milestone, dispute, profile
+  engagementId String?
+  engagement   Engagement? @relation(fields: [engagementId], references: [id])
+
+  notes        String   // min 10 chars enforced server-side
+  metadata     String   @default("{}") // JSON
+
+  createdAt    DateTime @default(now())
+}
+
+model Certificate {
+  id             String   @id @default(cuid())
+  engagementId   String
+  engagement     Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        User     @relation(fields: [studentId], references: [id])
+  studentName    String
+  university     String?
+  projectTitle   String
+  companyName    String
+  duration       String
+  milestoneSummary String // JSON array
+  verificationUrl String
+  createdAt      DateTime @default(now())
+}
+
+model ProjectRating {
+  id             String   @id @default(cuid())
+  engagementId   String
+  engagement     Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  raterId        String
+  rater          User     @relation("RaterRatings", fields: [raterId], references: [id])
+  rateeId        String
+  ratee          User     @relation("RateeRatings", fields: [rateeId], references: [id])
+  tags           String   @default("[]") // JSON array of tag strings
+  overallTag     String   // would_collaborate_again, would_not_recommend, neutral
+  createdAt      DateTime @default(now())
+
+  @@unique([engagementId, raterId])
+}
+
+model Message {
+  id           String   @id @default(cuid())
+  senderId     String
+  sender       User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId   String
+  receiver     User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  body         String
+  read         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+model Verification {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String    // trade_license, email, faculty, government
+  documentUrl  String?
+  status       String    @default("pending") // pending, approved, rejected
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+}
+
+model Job {
+  id           String    @id @default(cuid())
+  companyId    String
+  company      User      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title        String
+  type         String    // internship, fulltime, parttime, contract
+  skills       String    @default("[]") // JSON array
+  description  String
+  location     String?
+  salary       String?
+  deadline     DateTime?
+  status       String    @default("active") // active, closed, draft
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model FraudReport {
+  id           String   @id @default(cuid())
+  reportedById String
+  reportedBy   User     @relation("ReportedBy", fields: [reportedById], references: [id])
+  reportedUserId String
+  reportedUser User     @relation("ReportedAgainst", fields: [reportedUserId], references: [id])
+  reason       String
+  description  String
+  status       String   @default("pending") // pending, reviewed, resolved, dismissed
+  createdAt    DateTime @default(now())
+}

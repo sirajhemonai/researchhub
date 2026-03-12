@@ -1,0 +1,555 @@
+Here is the complete technical specification for AI developers building ResearchBridge BD:
+
+---
+
+# ResearchBridge BD — Collaboration Flow Technical Specification
+### For AI Developers and Platform Engineers | Bangladesh Context
+
+---
+
+## 1. System Overview
+
+ResearchBridge BD is a human-mediated research collaboration platform connecting companies, students, and researchers in Bangladesh, backed by Daffodil International University (DIU). The platform operates across three sequential phases:
+
+1. **Phase 1** — Onboarding and deposit
+2. **Phase 2** — Milestone execution loop (repeats per milestone)
+3. **Phase 3** — Project closure and outputs
+
+The critical architectural decision at MVP: **the platform is a trust layer with a human admin in the loop, not a fully automated pipeline.** Software supports the admin. The admin makes judgment calls. Automation is added progressively.
+
+All money flows through the platform. There is zero direct payment between company and student at any stage.
+
+---
+
+## 2. Entities and State Model
+
+```
+Entities:
+  Company        — problem owner, pays deposit
+  Student        — researcher, delivers milestones
+  PlatformAdmin  — escrow holder, dispute mediator, manual verifier
+  DIU            — institutional anchor, co-signs certificates
+
+Project states:
+  NEGOTIATING → PENDING_DEPOSIT → ACTIVE → MILESTONE_LOOP → CLOSING → CLOSED
+
+Milestone states:
+  PENDING → SUBMITTED → UNDER_REVIEW → APPROVED
+                      ↘ REVISION_REQUESTED (max 2x) → back to SUBMITTED
+                      ↘ DISPUTED → ADMIN_RULING → APPROVED | PARTIAL | REFUNDED
+```
+
+---
+
+## 3. Phase 1 — Onboarding and Deposit
+
+### 3.1 Shortlisting
+
+Company discovers and shortlists a student. No binding commitment exists yet.
+
+```
+Trigger:    Company clicks "Shortlist" on a student profile
+Output:     Notification to student, negotiation channel opened
+Constraint: Either party can decline within 48h, no penalty
+```
+
+Before any agreement is signed, the company must register a **named contact with a direct phone number** — not a general office email. This is enforced at the data model level, not just UI. A `company.named_contact_phone` field must be non-null before the agreement generation endpoint is callable.
+
+### 3.2 Milestone Negotiation
+
+Company proposes the project structure. Each milestone has:
+
+```json
+{
+  "milestone_id": "uuid",
+  "title": "string",
+  "description": "string",
+  "due_date": "ISO8601",
+  "submission_requirements": "string",
+  "order": 1
+}
+```
+
+Payment structure is intentionally simple and fixed:
+
+```
+30% deposit → held by platform on agreement signing
+70% final  → released to student on project completion
+```
+
+Do not implement per-milestone payment splits at MVP. Bangladeshi companies resist committing payment percentages per milestone upfront, and it creates excessive dispute surface area. The 30/70 split is the only structure that consistently gets agreements signed.
+
+**Negotiation rules to enforce:**
+
+```
+- Student may counter-propose up to 2 rounds
+- If round 2 fails, admin proposes a binding split
+- Either party may withdraw after admin proposal with no penalty
+- Admin can flag: unrealistic scope, below-market pay, academic calendar conflicts
+- Platform logs all proposal versions with timestamps for dispute reference
+```
+
+### 3.3 Agreement Generation
+
+When both parties confirm terms, auto-generate a PDF agreement. The agreement must contain:
+
+```
+1. Project title and dates
+2. Full milestone list (title, due date, submission requirements)
+3. Payment terms in BDT (deposit amount, platform fee %, net student payout)
+4. Revision policy (max 2 per milestone, then escalation)
+5. Dispute process (admin mediation, binding ruling, badge consequences)
+6. Certificate conditions (co-signatories: DIU + named company contact)
+```
+
+> **BD Legal Reality:** Digital contracts between students and SMEs have near-zero legal enforceability in Bangladesh. Do not architect the trust model around legal enforcement. The agreement's real functions are: (a) setting explicit shared expectations, (b) creating an internal paper trail for admin dispute decisions, (c) signaling commitment. Your actual enforcement mechanisms are reputation (standing badge) and certificate access.
+
+Confirmation flow:
+
+```
+Both parties receive PDF via email
+Both click "Confirm agreement" in-platform
+Project state transitions: NEGOTIATING → PENDING_DEPOSIT
+5-day deposit deadline timer starts
+```
+
+### 3.4 Deposit Collection and Verification
+
+```
+Company → bKash/Nagad transfer → Platform wallet
+                                        ↓
+                               Admin manually verifies
+                                        ↓
+                               Admin clicks "Payment confirmed"
+                                        ↓
+                          Project state: PENDING_DEPOSIT → ACTIVE
+                          Both parties notified
+                          Milestone 1 timer starts
+```
+
+**Failure path:** If deposit not received within 5 days, agreement auto-expires. Company may re-initiate with a fresh agreement.
+
+> **Engineering note on payment verification:** At MVP, verification is a single admin UI action — admin sees a "mark payment received" button that appears when the 5-day window is active. When you later integrate bKash/Nagad webhooks, match on: amount within ±2% of expected (mobile banking sometimes applies micro-fees), reference string contains project ID, sender number matches `company.named_contact_phone`. Any mismatch should route to admin review, not auto-reject.
+
+---
+
+## 4. Phase 2 — Milestone Execution Loop
+
+This loop runs once per milestone. It is the core of the platform.
+
+```
+START_MILESTONE
+      ↓
+Student submits deliverable
+      ↓
+Platform auto-check
+      ↓ (pass)                ↓ (fail)
+Forward to company       Notify student, block submission
+      ↓
+Company review (10-day window)
+      ↓ (approved)     ↓ (revision)       ↓ (no response)
+Record approval    Revision requested    Admin phones, then rules
+      ↓              (max 2×)                    ↓
+Milestone tags       ↓ (2 exhausted)        Binding decision
+recorded         Dispute escalation
+                       ↓
+                Admin ruling: full / partial / refund
+                       ↓
+              ALL MILESTONES DONE? → Phase 3
+              ELSE → next milestone
+```
+
+### 4.1 Student Submission
+
+Required fields — enforce server-side, not just client-side:
+
+```python
+class MilestoneSubmission:
+    deliverable_url: str        # required, must pass URL format validation
+    written_note: str           # required, min 50 words enforced
+    attachments: List[File]     # optional
+    submitted_at: datetime      # server-generated, not client-provided
+    is_late: bool               # computed: submitted_at > milestone.due_date
+```
+
+The `is_late` flag is computed server-side on write and is immutable. It feeds into the student's trust score and milestone tag history. Students should see a visible warning before submitting late but are not blocked.
+
+### 4.2 Platform Auto-check
+
+Run synchronously on submission before company is notified:
+
+```python
+def auto_check(submission):
+    checks = []
+
+    # 1. URL reachability
+    try:
+        r = requests.get(submission.deliverable_url, timeout=10)
+        if r.status_code == 200:
+            checks.append(("url_live", "pass"))
+        elif r.status_code == 403:
+            checks.append(("url_live", "manual_review"))  # common with Drive links
+        else:
+            checks.append(("url_live", "fail"))
+    except:
+        checks.append(("url_live", "fail"))
+
+    # 2. Word count
+    word_count = len(submission.written_note.split())
+    checks.append(("note_length", "pass" if word_count >= 50 else "fail"))
+
+    # 3. Late flag
+    checks.append(("on_time", "pass" if not submission.is_late else "late"))
+
+    return checks
+```
+
+**Key behavior:** A `manual_review` result on URL check does not block the submission. It routes it to admin review with a note to the company: "Deliverable link requires login — please access directly." Hard fail on URL (non-200 excluding 403) and note length only.
+
+### 4.3 Company Review Window
+
+```
+Day 0   → Company notified (email + in-app)
+Day 5   → Automated reminder email
+Day 8   → Second reminder, higher urgency
+Day 10  → Admin phones named_contact_phone directly
+          If unreachable → admin makes preliminary ruling
+```
+
+Company can request one 7-day extension via a single-click action before day 10. Only one extension is permitted per milestone.
+
+```python
+class ReviewWindow:
+    base_days: int = 10
+    extension_days: int = 7
+    extensions_used: int = 0      # max 1
+    admin_call_day: int = 10
+    
+    def is_extension_available(self):
+        return self.extensions_used == 0
+    
+    def effective_deadline(self):
+        return self.base_days + (self.extension_days if self.extensions_used > 0 else 0)
+```
+
+> **BD context note:** Do not implement hard auto-approval at any deadline. The admin phones the company and makes a human decision. Auto-approval at day 10 or day 17 sounds elegant but will generate company complaints and churn in the Bangladeshi market. The phone call is the mechanism, not the timer.
+
+### 4.4 Revision Path
+
+If company requests revision, they must provide written feedback. The platform enforces a minimum 30-word feedback requirement — vague requests like "not good enough" are rejected at the API level.
+
+```python
+class RevisionRequest:
+    feedback: str               # min 30 words, enforced server-side
+    revision_number: int        # 1 or 2, platform-computed
+    requested_at: datetime
+
+# Revision limit enforcement
+if milestone.revision_count >= 2:
+    # Block revision request, surface dispute option instead
+    raise MaxRevisionsExceeded("Escalate to dispute process")
+```
+
+When a revision is accepted by the student, the milestone state returns to `SUBMITTED` and the submission form reopens. The review window clock restarts from Day 0 for the revised submission.
+
+### 4.5 Dispute Escalation
+
+Triggered when: revision limit exhausted, company unresponsive past deadline, or student disputes a revision request as unreasonable.
+
+```
+Dispute raised
+      ↓
+Admin assigned (platform-internal round-robin or manual)
+      ↓
+Admin phones BOTH parties within 48 hours
+      ↓
+Admin reviews: original milestone description, submission, revision history, both parties' statements
+      ↓
+Admin issues ruling:
+    FULL_RELEASE   → full milestone payment released to student
+    PARTIAL        → admin sets % split (e.g. 60% student, 40% returned to company)
+    REFUND         → submission rejected, relevant portion returned to company deposit
+      ↓
+Ruling is logged, timestamped, and immutable
+Both parties notified with reasoning
+```
+
+> **Critical design decision:** The ruling is made by a human admin, logged in the platform as an admin action, and is not appealable within the platform. Disputants who want to escalate further are directed to informal mediation outside the platform. Do not build an appeal layer at MVP — it adds complexity without proportional benefit at low volume.
+
+**Standing badge consequences:**
+
+```python
+class CompanyStanding:
+    # Updated after every dispute ruling
+    disputes_unresolved: int
+    
+    def badge(self):
+        if self.disputes_unresolved == 0:
+            return "GREEN"
+        elif self.disputes_unresolved <= 2:
+            return "YELLOW"
+        elif self.disputes_unresolved <= 3:
+            return "RED"
+        else:
+            return "BANNED"   # access revoked, admin review required to reinstate
+```
+
+The standing badge is visible to all students on the company profile. This is the platform's primary enforcement lever — loss of access to verified student talent is more actionable than any legal threat.
+
+### 4.6 Milestone Tagging (Trust Signal)
+
+After every milestone approval, both parties submit tags. Tags are collected 48 hours after approval (delay reduces recency bias) and are mandatory before the next milestone unlocks.
+
+```python
+# Company tags student
+STUDENT_TAGS = [
+    "submitted_on_time",
+    "communication_clear",
+    "deliverable_matched_scope",
+    "needed_multiple_revisions",
+    "required_significant_guidance",
+]
+
+# Student tags company
+COMPANY_TAGS = [
+    "reviewed_promptly",
+    "feedback_was_specific",
+    "unresponsive",
+    "changed_scope_mid_milestone",
+    "payment_committed",
+]
+```
+
+**Do not use star ratings as the primary trust signal.** Bangladeshi professional culture produces strongly positively skewed stars — the data is effectively meaningless within 3 months of launch. Tags are binary and easier to give honestly. Stars may optionally be collected as a secondary signal but should not drive trust score calculation.
+
+---
+
+## 5. Phase 3 — Project Closure
+
+Triggered when all milestones reach `APPROVED` state.
+
+### 5.1 Final Quality Check
+
+Before releasing payment and issuing certificates:
+
+```
+Admin reviews full project output:
+    - All milestone deliverables accessible
+    - Written notes on file
+    - No open disputes
+    - Company named contact confirms project complete (email confirmation logged)
+
+If issues found → admin contacts relevant party, resolves before closure
+If no issues → admin triggers closure workflow
+```
+
+### 5.2 Payment Release
+
+```python
+def release_final_payment(project):
+    gross = project.total_value * 0.70          # remaining after deposit
+    platform_fee = gross * project.fee_rate     # agreed at onboarding, typically 10–15%
+    net_to_student = gross - platform_fee
+    
+    # Admin initiates bKash/Nagad transfer to student
+    # At MVP: manual transfer, admin logs transaction ID
+    # Later: API-triggered with webhook confirmation
+    
+    project.payment_status = "RELEASED"
+    project.net_student_payout_bdt = net_to_student
+    log_transaction(project, net_to_student, "FINAL_RELEASE")
+```
+
+Students must see the net payout amount clearly **before agreeing to the project**, not only at release time. Surface this in the agreement PDF and the student's project dashboard from day one.
+
+### 5.3 Rating Collection
+
+Ratings are unlocked 7 days after project closure — not immediately. This reduces the social pressure of rating someone you just worked with and produces more honest data.
+
+```python
+# Rating window: opens at (closure_date + 7 days), closes at (closure_date + 21 days)
+# After 21 days, rating is locked as skipped and does not penalize trust score
+
+class ProjectRating:
+    rated_by: str           # "company" | "student"
+    tags: List[str]         # from approved tag lists above
+    overall_tag: str        # "would_collaborate_again" | "would_not_recommend" | "neutral"
+    # No numeric stars at MVP
+```
+
+### 5.4 Trust Score Calculation
+
+```python
+def compute_student_trust_score(student):
+    projects = get_completed_projects(student)
+    
+    completion_rate = completed / total_started           # weight: 0.40
+    
+    on_time_rate = milestones_on_time / total_milestones  # weight: 0.30
+    
+    # Tag ratio: positive tags / total tags received from companies
+    positive_tags = ["submitted_on_time", "communication_clear", "deliverable_matched_scope"]
+    tag_score = positive_tag_count / total_tag_count      # weight: 0.20
+    
+    # Project size weight: larger projects (by BDT value) carry more signal
+    size_weight = log(avg_project_value_bdt) / 10         # weight: 0.10
+    
+    return (
+        0.40 * completion_rate +
+        0.30 * on_time_rate +
+        0.20 * tag_score +
+        0.10 * size_weight
+    )
+```
+
+A student with 20 five-star ratings and no tag data should score lower than a student with 8 projects, 95% on-time rate, and consistent positive tags. Weight objective signals over subjective ones.
+
+### 5.5 Certificate Generation
+
+The certificate is the primary value proposition for students. It must be treated as a first-class platform output, not a PDF afterthought.
+
+```
+Certificate contains:
+    - Student name and university (DIU)
+    - Project title and company name
+    - Duration and completion date
+    - Milestone summary (count completed, domains covered)
+    - Co-signature fields: DIU supervisor + company named contact
+    - Unique certificate ID (verifiable via platform URL)
+    - QR code linking to verification page
+
+Issuance conditions:
+    - All milestones approved
+    - Final quality check passed
+    - Company sign-off logged
+    - No open disputes
+    - Platform fee settled
+```
+
+> **Design note:** The certificate verification URL (`researchbridge.bd/verify/{cert_id}`) must remain permanently accessible even if the project is archived. Companies will check this URL when reviewing future job applications. If it goes down, you destroy retroactive trust in every certificate ever issued. Treat this endpoint as critical infrastructure from day one.
+
+---
+
+## 6. Cross-cutting Concerns
+
+### 6.1 Notification Architecture
+
+Every state transition must trigger a notification. At MVP, email + in-app is sufficient. SMS via local gateway (e.g. SSL Wireless) is strongly recommended for dispute and payment events — email open rates in Bangladesh are low, especially for non-Gmail users.
+
+```python
+NOTIFICATION_EVENTS = {
+    "shortlisted":              ["student"],
+    "agreement_generated":      ["company", "student"],
+    "deposit_due":              ["company"],
+    "deposit_received":         ["company", "student"],
+    "project_active":           ["company", "student"],
+    "milestone_submitted":      ["company", "admin"],
+    "auto_check_failed":        ["student"],
+    "review_reminder_day5":     ["company"],
+    "review_reminder_day8":     ["company"],
+    "review_window_day10":      ["admin"],        # triggers admin phone call
+    "milestone_approved":       ["student"],
+    "revision_requested":       ["student"],
+    "dispute_raised":           ["admin"],
+    "admin_ruling":             ["company", "student"],
+    "project_closing":          ["company", "student", "admin"],
+    "payment_released":         ["student"],
+    "certificate_issued":       ["student", "company"],
+    "rating_window_open":       ["company", "student"],
+}
+```
+
+### 6.2 Admin Dashboard — Minimum Viable Screens
+
+The admin dashboard is as important as the student/company-facing UI. Without it, the human-mediated model breaks down.
+
+```
+Required views:
+    1. Payment queue       — projects in PENDING_DEPOSIT with deposit deadline countdown
+    2. Review watch        — milestones approaching day 8/10 with company phone numbers visible
+    3. Dispute queue       — open disputes ordered by days since raised
+    4. Closure queue       — projects ready for final quality check
+    5. Transaction log     — all money movements with timestamps and admin who actioned
+    6. Standing badge mgmt — company badge overrides and ban history
+```
+
+### 6.3 Data Retention and Audit
+
+Every admin action must be logged with:
+```python
+class AdminAction:
+    admin_id: str
+    action_type: str        # "payment_confirmed", "dispute_ruled", "project_closed", etc.
+    entity_id: str          # project_id, milestone_id, etc.
+    timestamp: datetime
+    notes: str              # required, min 10 chars — forces admins to leave reasoning
+    metadata: dict          # action-specific data (ruling %, amounts, call log ref)
+```
+
+Never allow admin actions to be deleted or overwritten. Append-only log. This protects the platform from future disputes about what admin decisions were made and when.
+
+### 6.4 What Not to Build at MVP
+
+To avoid scope creep that kills the launch:
+
+```
+NOT at MVP:
+    ✗ Automated payment API integration (manual bKash/Nagad verification is fine)
+    ✗ Algorithmic dispute resolution (human admin only)
+    ✗ Star rating system (use tags)
+    ✗ Per-milestone payment splits (30/70 only)
+    ✗ In-platform video/chat (use WhatsApp, log that it happened)
+    ✗ Automated certificate verification API (static URL is enough)
+    ✗ Mobile app (mobile web is sufficient initially)
+    ✗ Multi-language UI (English first, Bengali later)
+
+BUILD at MVP:
+    ✓ Admin dashboard with the 6 views above
+    ✓ Agreement PDF generation
+    ✓ Auto-check on submission (URL + word count)
+    ✓ Reminder scheduler (day 5, 8, 10)
+    ✓ Tag collection system
+    ✓ Trust score computation
+    ✓ Certificate generation with QR verification
+    ✓ Standing badge system
+    ✓ Append-only admin action log
+```
+
+---
+
+## 7. Summary State Machine
+
+```
+[SHORTLISTED]
+      ↓ both parties confirm
+[NEGOTIATING]
+      ↓ agreement signed
+[PENDING_DEPOSIT]
+      ↓ admin confirms bKash/Nagad receipt
+[ACTIVE]
+      ↓ enters milestone loop
+      ┌─────────────────────────────────────────────┐
+      │  [MILESTONE: PENDING]                        │
+      │        ↓ student submits                     │
+      │  [MILESTONE: SUBMITTED]                      │
+      │        ↓ auto-check pass                     │
+      │  [MILESTONE: UNDER_REVIEW]                   │
+      │        ↓ approved          ↓ revision (≤2x)  │
+      │  [MILESTONE: APPROVED]   [back to SUBMITTED] │
+      │        ↓ all approved                        │
+      └─────────────────────────────────────────────┘
+[CLOSING]
+      ↓ admin quality check + company sign-off
+[PAYMENT_RELEASED]
+      ↓ certificate generated
+[CLOSED]
+      ↓ 7 days later
+[RATINGS_OPEN]
+      ↓ 21 days after closure
+[ARCHIVED]
+```
+
+---
+
+*ResearchBridge BD — Internal Technical Specification v1.0 — March 2026*
+*Supervised by Dr. Sheak Rashed Haider Noori, DIU*

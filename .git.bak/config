@@ -1,0 +1,32 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[remote "gitsafe-backup"]
+	url = git://gitsafe:5418/backup.git
+	fetch = +refs/heads/*:refs/remotes/gitsafe-backup/*
+	skipFetchAll = true
+	lfsurl = http://gitsafe:5419
+[remote "origin"]
+	url = https://github.com/SirajHEmon/researchcollab.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "master"]
+	remote = origin
+	merge = refs/heads/master
+[lfs "http://gitsafe:5419"]
+	locksverify = false
+[remote "subrepl-lwfv0plc"]
+	url = git+ssh://git@ssh.kirk.replit.dev:/home/runner/workspace
+	fetch = +refs/heads/*:refs/remotes/subrepl-lwfv0plc/*
+	lfsurl = ssh://git@ssh.kirk.replit.dev/home/runner/workspace
+[lfs]
+	repositoryformatversion = 0
+[remote "subrepl-txyg5jl4"]
+	url = git+ssh://git@ssh.kirk.replit.dev:/home/runner/workspace
+	fetch = +refs/heads/*:refs/remotes/subrepl-txyg5jl4/*
+	lfsurl = ssh://git@ssh.kirk.replit.dev/home/runner/workspace
+[remote "subrepl-6vsdxa8h"]
+	url = git+ssh://git@ssh.kirk.replit.dev:/home/runner/workspace
+	fetch = +refs/heads/*:refs/remotes/subrepl-6vsdxa8h/*
+	lfsurl = ssh://git@ssh.kirk.replit.dev/home/runner/workspace

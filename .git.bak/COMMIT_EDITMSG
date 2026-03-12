@@ -1,0 +1,35 @@
+Task #4: Pipeline Closure, Certificates & Admin Dashboard
+
+Schema Changes:
+- Added Milestone, AdminAction, Certificate, ProjectRating, Dispute, MilestoneTag models
+- Extended Engagement with full state machine (negotiating→pending_deposit→active→closing→closed→archived)
+- Added project payment fields (projectValueBdt, platformFeeRate, depositAmountBdt, netStudentPayoutBdt)
+- Added namedContactPhone/Email, agreedAt, depositConfirmedAt, completedAt, closedAt
+- Added standingBadge field to Profile (green/yellow/red/banned)
+- Added @@unique([engagementId, raterId]) on ProjectRating
+
+API Routes Created:
+- POST /api/engagements/[id]/close - Admin quality check with AdminAction logging
+- POST /api/engagements/[id]/release-payment - Payment release + certificate generation in DB transaction
+- GET/POST /api/engagements/[id]/rate - Tag-based rating with 7-21 day window
+- GET /api/certificates/[certId] - Public certificate data (no auth)
+- GET/POST /api/admin/payment-queue - Deposit confirmation queue
+- GET /api/admin/review-watch - Milestone review deadline tracking
+- GET/POST /api/admin/dispute-queue - Dispute resolution with ruling form
+- GET /api/admin/closure-queue - Project closure queue
+- GET /api/admin/transaction-log - Append-only payment transaction log
+- GET/POST /api/admin/standing-badge - Company standing badge management
+
+UI Changes:
+- Admin dashboard: 6 new tabs (Payment Queue, Review Watch, Dispute Queue, Closure Queue, Transaction Log, Standing Badges)
+- /verify/[certId] - Public certificate verification page (no login required)
+- Student profile: Certificate badges with verification links
+- Profile API returns certificate data
+
+Trust Score:
+- Spec formula: completion_rate*0.40 + on_time_rate*0.30 + positive_tag_ratio*0.20 + log(avg_value)/10*0.10
+- Updated on payment release
+
+Also fixed pre-existing TypeScript errors (unknown→ReactNode) in profile and problems pages.
+
+Replit-Task-Id: 3b7cd03c-a5ce-4700-a523-47ef0d91b315

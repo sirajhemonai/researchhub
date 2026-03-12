@@ -1,0 +1,9 @@
+# pack-refs with: peeled fully-peeled sorted 
+e94e6e6fdec40fad9eaf94192e6f8cceec88d0b5 refs/heads/master
+24fe64564bdd8ae1dcd90e61406bf1b14815a950 refs/heads/replit-agent
+dac940bc92de970b80e5532532328eff65f3c0b5 refs/heads/subrepl-6vsdxa8h
+6ae1ddec864210a080002532909fb6fa8650069c refs/heads/subrepl-lwfv0plc
+29f1c7b26f2754812cdb7f72b6ada760fb2c0883 refs/heads/subrepl-txyg5jl4
+f2ae5419ba7aec3e2f5c40f75c114b22f7368f91 refs/remotes/gitsafe-backup/main
+504f9886b08ecd26687d91563a05c60104f38262 refs/remotes/origin/master
+24fe64564bdd8ae1dcd90e61406bf1b14815a950 refs/replit/agent-ledger
