@@ -83,3 +83,27 @@ export const messageSchema = z.object({
   receiverId: z.string().min(1),
   body: z.string().min(1, "Message cannot be empty"),
 });
+
+export const dataAssetSchema = z.object({
+  title:            z.string().min(5, "Title must be at least 5 characters"),
+  description:      z.string().min(30, "Description must be at least 30 characters"),
+  sector:           z.string().optional(),
+  dataType:         z.enum(["tabular", "image", "text", "audio", "mixed"]),
+  sensitivityLevel: z.enum(["low", "medium", "high", "critical"]),
+  accessMode:       z.enum(["metadata_only", "download", "controlled"]),
+  anonymization:    z.enum(["none", "deidentified", "anonymized", "synthetic"]),
+  recordsCount:     z.number().positive().optional(),
+  timePeriod:       z.string().optional(),
+  ndaRequired:      z.boolean(),
+  ethicsRequired:   z.boolean(),
+  commercialUse:    z.boolean(),
+});
+
+export const dataAccessRequestSchema = z.object({
+  purpose:        z.string().min(30, "Explain your research purpose in at least 30 characters"),
+  methodology:    z.string().optional(),
+  expectedOutput: z.string().optional(),
+  institution:    z.string().optional(),
+  ethicsDocUrl:   z.string().url().optional().or(z.literal("")),
+  requestedDays:  z.enum(["30", "60", "90"]),
+});

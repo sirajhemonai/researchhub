@@ -9,10 +9,12 @@ import { formatDate } from "@/lib/utils";
 import {
   Users, FileText, Briefcase, TrendingUp, ShieldCheck,
   AlertTriangle, CheckCircle2, XCircle, Clock, DollarSign,
-  Eye, Scale, FolderCheck, ScrollText, Shield
+  Eye, Scale, FolderCheck, ScrollText, Shield, Database
 } from "lucide-react";
+import { AuditLogTable } from "@/components/data-rooms/AuditLogTable";
+import { SensitivityBadge } from "@/components/data-rooms/SensitivityBadge";
 
-type TabType = "overview" | "verifications" | "fraud" | "payments" | "review" | "disputes" | "closure" | "transactions" | "standing";
+type TabType = "overview" | "verifications" | "fraud" | "payments" | "review" | "disputes" | "closure" | "transactions" | "standing" | "data-rooms";
 
 export default function AdminPage() {
   const { data: session } = useSession();
@@ -80,6 +82,7 @@ export default function AdminPage() {
     { key: "closure", label: "Closure Queue" },
     { key: "transactions", label: "Transaction Log" },
     { key: "standing", label: "Standing Badges" },
+    { key: "data-rooms", label: "Data Rooms" },
   ];
 
   return (
@@ -142,6 +145,7 @@ export default function AdminPage() {
           {activeTab === "closure" && <ClosureQueueTab />}
           {activeTab === "transactions" && <TransactionLogTab />}
           {activeTab === "standing" && <StandingBadgeTab />}
+          {activeTab === "data-rooms" && <DataRoomsAdminTab />}
         </>
       )}
     </div>
@@ -811,6 +815,198 @@ function StandingBadgeTab() {
             </Card>
           );
         })
+      )}
+    </div>
+  );
+}
+
+function DataRoomsAdminTab() {
+  const [subTab, setSubTab]         = useState<"pending-assets" | "pending-requests" | "audit-log">("pending-assets");
+  const [assets, setAssets]         = useState<Record<string, unknown>[]>([]);
+  const [requests, setRequests]     = useState<Record<string, unknown>[]>([]);
+  const [auditLogs, setAuditLogs]   = useState<Record<string, unknown>[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditPage, setAuditPage]   = useState(1);
+  const [auditTotalPages, setAuditTotalPages] = useState(1);
+  const [loading, setLoading]       = useState(true);
+  const [actioning, setActioning]   = useState<string | null>(null);
+
+  useEffect(() => { loadData(); }, [subTab, auditPage]);
+
+  async function loadData() {
+    setLoading(true);
+    if (subTab === "pending-assets") {
+      const res  = await fetch("/api/admin/data-assets?status=review");
+      const data = await res.json();
+      setAssets(data.assets || []);
+    } else if (subTab === "pending-requests") {
+      const res  = await fetch("/api/admin/data-access-requests?status=admin_review");
+      const data = await res.json();
+      setRequests(data.requests || []);
+    } else {
+      const res  = await fetch(`/api/admin/data-audit-logs?page=${auditPage}&limit=20`);
+      const data = await res.json();
+      setAuditLogs(data.logs || []);
+      setAuditTotal(data.total || 0);
+      setAuditTotalPages(data.totalPages || 1);
+    }
+    setLoading(false);
+  }
+
+  async function handleAssetAction(assetId: string, action: "publish" | "reject") {
+    setActioning(assetId);
+    await fetch("/api/admin/data-assets", {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ assetId, action }),
+    });
+    await loadData();
+    setActioning(null);
+  }
+
+  async function handleRequestAction(requestId: string, decision: "approved" | "rejected") {
+    setActioning(requestId);
+    await fetch(`/api/data-access-requests/${requestId}/admin-review`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ decision }),
+    });
+    await loadData();
+    setActioning(null);
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+        <Database className="w-5 h-5" /> Data Rooms Administration
+      </h2>
+
+      <div className="flex gap-1 border-b border-slate-200">
+        {[
+          { key: "pending-assets",   label: `Pending Assets (${assets.length})`    },
+          { key: "pending-requests", label: `Pending Requests (${requests.length})` },
+          { key: "audit-log",        label: "Audit Log"                             },
+        ].map((t) => (
+          <button
+            key={t.key}
+            onClick={() => { setSubTab(t.key as typeof subTab); }}
+            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${subTab === t.key ? "border-emerald-600 text-emerald-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="animate-pulse space-y-3">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-slate-200 rounded-xl" />)}
+        </div>
+      ) : subTab === "pending-assets" ? (
+        assets.length === 0 ? (
+          <Card className="p-8"><CardContent className="p-0 text-center"><CheckCircle2 className="w-12 h-12 text-emerald-300 mx-auto mb-3" /><p className="text-slate-600">No datasets pending review.</p></CardContent></Card>
+        ) : (
+          <div className="space-y-3">
+            {assets.map((asset) => {
+              const owner   = asset.owner as Record<string, unknown>;
+              const profile = owner?.profile as Record<string, unknown> | null;
+              return (
+                <Card key={asset.id as string}>
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h3 className="font-medium text-slate-900">{asset.title as string}</h3>
+                          <SensitivityBadge level={asset.sensitivityLevel as string} />
+                        </div>
+                        <p className="text-sm text-slate-600 line-clamp-2 mb-2">{asset.description as string}</p>
+                        <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                          <span>Owner: {(profile?.companyName as string) || (owner?.name as string)}</span>
+                          <span>Type: {asset.dataType as string}</span>
+                          {asset.sector && <span>Sector: {asset.sector as string}</span>}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <Button
+                          size="sm"
+                          onClick={() => handleAssetAction(asset.id as string, "publish")}
+                          disabled={actioning === (asset.id as string)}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1" /> Publish
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleAssetAction(asset.id as string, "reject")}
+                          disabled={actioning === (asset.id as string)}
+                        >
+                          <XCircle className="w-4 h-4 mr-1" /> Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : subTab === "pending-requests" ? (
+        requests.length === 0 ? (
+          <Card className="p-8"><CardContent className="p-0 text-center"><CheckCircle2 className="w-12 h-12 text-emerald-300 mx-auto mb-3" /><p className="text-slate-600">No access requests awaiting admin review.</p></CardContent></Card>
+        ) : (
+          <div className="space-y-3">
+            {requests.map((req) => {
+              const dataAsset  = req.dataAsset  as Record<string, unknown>;
+              const requester  = req.requester  as Record<string, unknown>;
+              const reqProfile = requester?.profile as Record<string, unknown> | null;
+              return (
+                <Card key={req.id as string}>
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h3 className="font-medium text-slate-900">{requester?.name as string}</h3>
+                          <Badge>{requester?.role as string}</Badge>
+                          {reqProfile?.university && <span className="text-xs text-slate-500">{reqProfile.university as string}</span>}
+                        </div>
+                        <p className="text-xs text-slate-500 mb-1">Dataset: <span className="font-medium text-slate-700">{dataAsset?.title as string}</span></p>
+                        <p className="text-sm text-slate-600 line-clamp-2">{req.purpose as string}</p>
+                        <div className="mt-1 flex gap-2 items-center">
+                          <SensitivityBadge level={dataAsset?.sensitivityLevel as string} />
+                          <span className="text-xs text-slate-400">{req.requestedDays as number} days requested</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <Button
+                          size="sm"
+                          onClick={() => handleRequestAction(req.id as string, "approved")}
+                          disabled={actioning === (req.id as string)}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1" /> Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleRequestAction(req.id as string, "rejected")}
+                          disabled={actioning === (req.id as string)}
+                        >
+                          <XCircle className="w-4 h-4 mr-1" /> Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        <AuditLogTable
+          logs={auditLogs as Parameters<typeof AuditLogTable>[0]["logs"]}
+          total={auditTotal}
+          page={auditPage}
+          totalPages={auditTotalPages}
+          onPageChange={(p) => setAuditPage(p)}
+        />
       )}
     </div>
   );

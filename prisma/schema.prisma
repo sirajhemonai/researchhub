@@ -34,6 +34,8 @@ model User {
   ratingsGiven   ProjectRating[] @relation("RaterRatings")
   ratingsReceived ProjectRating[] @relation("RateeRatings")
   certificates   Certificate[]
+  ownedDataAssets    DataAsset[]         @relation("OwnedDataAssets")
+  dataAccessRequests DataAccessRequest[] @relation("DataAccessRequests")
 }
 
 model Profile {
@@ -341,4 +343,93 @@ model FraudReport {
   description  String
   status       String   @default("pending") // pending, reviewed, resolved, dismissed
   createdAt    DateTime @default(now())
+}
+
+model DataAsset {
+  id               String   @id @default(cuid())
+  ownerId          String
+  owner            User     @relation("OwnedDataAssets", fields: [ownerId], references: [id])
+  title            String
+  description      String
+  sector           String?
+  dataType         String   // tabular, image, text, audio, mixed
+  sensitivityLevel String   // low, medium, high, critical
+  accessMode       String   // metadata_only, download, controlled
+  anonymization    String   // none, deidentified, anonymized, synthetic
+  recordsCount     Int?
+  timePeriod       String?
+  ndaRequired      Boolean  @default(true)
+  ethicsRequired   Boolean  @default(false)
+  commercialUse    Boolean  @default(false)
+  status           String   @default("draft") // draft, review, published, suspended
+  storagePath      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  accessRequests   DataAccessRequest[]
+  accessGrants     DataAccessGrant[]
+  auditLogs        DataAuditLog[]
+}
+
+model DataAccessRequest {
+  id              String    @id @default(cuid())
+  dataAssetId     String
+  dataAsset       DataAsset @relation(fields: [dataAssetId], references: [id], onDelete: Cascade)
+  requesterId     String
+  requester       User      @relation("DataAccessRequests", fields: [requesterId], references: [id])
+  purpose         String
+  methodology     String?
+  expectedOutput  String?
+  institution     String?
+  ethicsDocUrl    String?
+  requestedDays   Int?      // 30, 60, 90
+  status          String    @default("pending")
+  // pending | owner_review | admin_review | approved | rejected | revoked | expired
+  ownerDecision   String?   // approved | rejected
+  adminDecision   String?   // approved | rejected
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+  reviewedAt      DateTime?
+
+  agreement       DataUseAgreement?
+  grant           DataAccessGrant?
+  auditLogs       DataAuditLog[]
+}
+
+model DataUseAgreement {
+  id             String            @id @default(cuid())
+  requestId      String            @unique
+  request        DataAccessRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  agreementText  String
+  signedByUserId String
+  signedAt       DateTime          @default(now())
+  ipAddress      String?
+  status         String            @default("signed")
+}
+
+model DataAccessGrant {
+  id          String            @id @default(cuid())
+  requestId   String            @unique
+  request     DataAccessRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  userId      String
+  dataAssetId String
+  dataAsset   DataAsset         @relation(fields: [dataAssetId], references: [id])
+  accessMode  String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  status      String            @default("active") // active, expired, revoked
+}
+
+model DataAuditLog {
+  id          String             @id @default(cuid())
+  userId      String
+  dataAssetId String
+  dataAsset   DataAsset          @relation(fields: [dataAssetId], references: [id])
+  requestId   String?
+  request     DataAccessRequest? @relation(fields: [requestId], references: [id])
+  action      String
+  ipAddress   String?
+  userAgent   String?
+  metadata    String?
+  createdAt   DateTime           @default(now())
 }
