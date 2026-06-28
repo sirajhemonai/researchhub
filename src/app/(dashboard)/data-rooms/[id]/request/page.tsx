@@ -50,12 +50,12 @@ export default function RequestAccessPage() {
   });
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !session) return;
     fetch(`/api/data-assets/${id}`)
       .then((r) => r.json())
       .then((data) => { setAsset(data.asset || null); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [id]);
+  }, [id, session]);
 
   function set(key: string, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));

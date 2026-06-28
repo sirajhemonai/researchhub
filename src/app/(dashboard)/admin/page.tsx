@@ -918,11 +918,11 @@ function DataRoomsAdminTab() {
                           <h3 className="font-medium text-slate-900">{asset.title as string}</h3>
                           <SensitivityBadge level={asset.sensitivityLevel as string} />
                         </div>
-                        <p className="text-sm text-slate-600 line-clamp-2 mb-2">{asset.description as string}</p>
+                        <p className="text-sm text-slate-600 line-clamp-2 mb-2">{String(asset.description)}</p>
                         <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-                          <span>Owner: {(profile?.companyName as string) || (owner?.name as string)}</span>
-                          <span>Type: {asset.dataType as string}</span>
-                          {asset.sector && <span>Sector: {asset.sector as string}</span>}
+                          <span>Owner: {String((profile?.companyName) || (owner?.name) || "")}</span>
+                          <span>Type: {String(asset.dataType)}</span>
+                          {!!asset.sector && <span>Sector: {String(asset.sector)}</span>}
                         </div>
                       </div>
                       <div className="flex gap-2 flex-shrink-0">
@@ -964,15 +964,15 @@ function DataRoomsAdminTab() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="font-medium text-slate-900">{requester?.name as string}</h3>
-                          <Badge>{requester?.role as string}</Badge>
-                          {reqProfile?.university && <span className="text-xs text-slate-500">{reqProfile.university as string}</span>}
+                          <h3 className="font-medium text-slate-900">{String(requester?.name ?? "")}</h3>
+                          <Badge>{String(requester?.role ?? "")}</Badge>
+                          {!!reqProfile?.university && <span className="text-xs text-slate-500">{String(reqProfile.university)}</span>}
                         </div>
-                        <p className="text-xs text-slate-500 mb-1">Dataset: <span className="font-medium text-slate-700">{dataAsset?.title as string}</span></p>
-                        <p className="text-sm text-slate-600 line-clamp-2">{req.purpose as string}</p>
+                        <p className="text-xs text-slate-500 mb-1">Dataset: <span className="font-medium text-slate-700">{String(dataAsset?.title ?? "")}</span></p>
+                        <p className="text-sm text-slate-600 line-clamp-2">{String(req.purpose ?? "")}</p>
                         <div className="mt-1 flex gap-2 items-center">
-                          <SensitivityBadge level={dataAsset?.sensitivityLevel as string} />
-                          <span className="text-xs text-slate-400">{req.requestedDays as number} days requested</span>
+                          <SensitivityBadge level={String(dataAsset?.sensitivityLevel ?? "")} />
+                          <span className="text-xs text-slate-400">{Number(req.requestedDays)} days requested</span>
                         </div>
                       </div>
                       <div className="flex gap-2 flex-shrink-0">
@@ -1001,7 +1001,7 @@ function DataRoomsAdminTab() {
         )
       ) : (
         <AuditLogTable
-          logs={auditLogs as Parameters<typeof AuditLogTable>[0]["logs"]}
+          logs={auditLogs as unknown as Parameters<typeof AuditLogTable>[0]["logs"]}
           total={auditTotal}
           page={auditPage}
           totalPages={auditTotalPages}

@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Menu, X, ChevronDown, User, LogOut, LayoutDashboard,
-  Briefcase, MessageSquare, Search, FileText, Shield, Handshake
+  Briefcase, MessageSquare, Search, FileText, Shield, Handshake, Database
 } from "lucide-react";
 
 export function Navbar() {
@@ -36,7 +36,8 @@ export function Navbar() {
         { href: "/engagements", label: "Engagements", icon: Handshake, notify: engagementNotify },
         { href: "/talent", label: "Talent", icon: Search, notify: false },
         { href: "/jobs", label: "Jobs", icon: Briefcase, notify: false },
-        { href: "/messages", label: "Messages", icon: MessageSquare, notify: false },
+        { href: "/messages",   label: "Messages",   icon: MessageSquare, notify: false },
+        { href: "/data-rooms", label: "Data Rooms", icon: Database,      notify: false },
       ]
     : [];
 

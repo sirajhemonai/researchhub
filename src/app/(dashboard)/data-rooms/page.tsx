@@ -70,7 +70,10 @@ export default function DataRoomsPage() {
   const [page, setPage]             = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  useEffect(() => { fetchAssets(); }, [page, sector, dataType, sensitivity, accessMode]);
+  useEffect(() => {
+    if (!session) return;
+    fetchAssets();
+  }, [session, page, sector, dataType, sensitivity, accessMode]);
 
   async function fetchAssets() {
     setLoading(true);

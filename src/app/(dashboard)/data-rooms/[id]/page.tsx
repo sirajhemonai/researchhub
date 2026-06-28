@@ -44,6 +44,7 @@ interface AccessRequest {
   status: string;
   ownerDecision: string | null;
   adminDecision: string | null;
+  agreement: { id: string } | null;
 }
 
 interface AccessGrant {
@@ -72,7 +73,7 @@ export default function DataAssetDetailPage() {
   const [submitReview, setSubmitReview]         = useState(false);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !session) return;
     fetch(`/api/data-assets/${id}`)
       .then((r) => r.json())
       .then((data) => {
@@ -82,7 +83,7 @@ export default function DataAssetDetailPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [id]);
+  }, [id, session]);
 
   async function handleSubmitForReview() {
     setSubmitReview(true);

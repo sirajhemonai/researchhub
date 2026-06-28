@@ -627,6 +627,123 @@ Salary: BDT 35,000-50,000/month`,
     },
   });
 
+  // ── Data Assets ────────────────────────────────────────────────────────────
+  const asset1 = await prisma.dataAsset.create({
+    data: {
+      ownerId:          researcher1.id,
+      title:            "Bangla Crop Disease Image Dataset (2019-2024)",
+      description:      "Over 12,000 labeled images of rice, potato, and tomato diseases collected from field surveys across 8 districts in Bangladesh. Images were captured by trained agricultural extension workers using standardised protocols. Each image is annotated with disease type, severity level, crop variety, and GPS coordinates.",
+      sector:           "Agriculture & Agritech",
+      dataType:         "image",
+      sensitivityLevel: "low",
+      accessMode:       "download",
+      anonymization:    "anonymized",
+      recordsCount:     12450,
+      timePeriod:       "2019–2024",
+      ndaRequired:      false,
+      ethicsRequired:   false,
+      commercialUse:    false,
+      status:           "published",
+      storagePath:      "/datasets/crop-disease-images-v2.zip",
+    },
+  });
+
+  const asset2 = await prisma.dataAsset.create({
+    data: {
+      ownerId:          company3.id,
+      title:            "Anonymised Mobile Banking Transaction Records",
+      description:      "18 months of anonymised transaction data from a mobile banking platform covering 500,000+ records. Includes transaction amount, category, timestamp, device fingerprint hash, and binary fraud label. All personally identifiable information has been removed. Intended for fraud detection and financial behaviour research.",
+      sector:           "Fintech",
+      dataType:         "tabular",
+      sensitivityLevel: "high",
+      accessMode:       "controlled",
+      anonymization:    "deidentified",
+      recordsCount:     528_000,
+      timePeriod:       "Jan 2023–Jun 2024",
+      ndaRequired:      true,
+      ethicsRequired:   true,
+      commercialUse:    false,
+      status:           "published",
+      storagePath:      "/datasets/finedge-txn-anon-v1.csv.gz",
+    },
+  });
+
+  await prisma.dataAsset.create({
+    data: {
+      ownerId:          company2.id,
+      title:            "Bangladesh Agricultural Commodity Prices (DAM, 2018-2024)",
+      description:      "Daily wholesale and retail price records for 12 major agricultural commodities across 64 district markets, sourced from the Department of Agricultural Marketing (DAM). Includes commodity name, market location, min/max/average price, and unit. Useful for price forecasting, supply-chain analysis, and seasonal pattern research.",
+      sector:           "Agriculture & Agritech",
+      dataType:         "tabular",
+      sensitivityLevel: "low",
+      accessMode:       "download",
+      anonymization:    "none",
+      recordsCount:     1_840_000,
+      timePeriod:       "2018–2024",
+      ndaRequired:      false,
+      ethicsRequired:   false,
+      commercialUse:    true,
+      status:           "published",
+      storagePath:      "/datasets/dam-prices-2018-2024.csv",
+    },
+  });
+
+  // One asset still in review (to populate admin queue)
+  await prisma.dataAsset.create({
+    data: {
+      ownerId:          researcher1.id,
+      title:            "Student Academic Performance & Mental Health Survey (DU, 2024)",
+      description:      "Survey responses from 3,200 undergraduate students at Dhaka University covering academic performance metrics, mental health screening (PHQ-9, GAD-7), socioeconomic background, and study habits. Data collected with IRB approval. Sensitive fields are pseudonymised. Intended for educational research only.",
+      sector:           "Education",
+      dataType:         "tabular",
+      sensitivityLevel: "critical",
+      accessMode:       "metadata_only",
+      anonymization:    "anonymized",
+      recordsCount:     3200,
+      timePeriod:       "Apr–Sep 2024",
+      ndaRequired:      true,
+      ethicsRequired:   true,
+      commercialUse:    false,
+      status:           "review",
+      storagePath:      "/datasets/du-student-survey-2024.xlsx",
+    },
+  });
+
+  // Sample access request on the fintech dataset
+  const accessReq = await prisma.dataAccessRequest.create({
+    data: {
+      dataAssetId:   asset2.id,
+      requesterId:   researcher1.id,
+      purpose:       "We are researching financial inclusion patterns in Bangladesh. The fraud-labelled transaction records will allow us to build a risk model specifically calibrated for the Bangladeshi mobile banking context, which is underrepresented in global literature.",
+      methodology:   "Logistic regression and gradient-boosted trees with SHAP explainability",
+      expectedOutput:"A peer-reviewed publication and an open-source model card",
+      institution:   "Daffodil International University",
+      requestedDays: 90,
+      status:        "owner_review",
+    },
+  });
+
+  // Audit log entry for the request
+  await prisma.dataAuditLog.create({
+    data: {
+      userId:      researcher1.id,
+      dataAssetId: asset2.id,
+      requestId:   accessReq.id,
+      action:      "access_requested",
+      metadata:    JSON.stringify({ purpose: "financial inclusion research" }),
+    },
+  });
+
+  // Audit log entry for a browse action
+  await prisma.dataAuditLog.create({
+    data: {
+      userId:      student2.id,
+      dataAssetId: asset1.id,
+      action:      "metadata_viewed",
+      metadata:    JSON.stringify({ page: "/data-rooms/" + asset1.id }),
+    },
+  });
+
   console.log("Database seeded successfully!");
   console.log("\nTest accounts (all passwords: password123):");
   console.log("  Admin:      admin@researchbridge.com.bd");
