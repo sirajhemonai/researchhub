@@ -2,6 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,8 @@ import {
 } from "lucide-react";
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [stats, setStats] = useState<Record<string, number>>({});
   const [recentProblems, setRecentProblems] = useState<Record<string, unknown>[]>([]);
   const [recentJobs, setRecentJobs] = useState<Record<string, unknown>[]>([]);
@@ -21,33 +23,67 @@ export default function DashboardPage() {
   const [awaitingAction, setAwaitingAction] = useState(false);
 
   useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+      return;
+    }
+    if (status !== "authenticated" || !session) return;
+
     fetch("/api/problems?limit=5").then((r) => r.json()).then((d) => setRecentProblems(d.problems || []));
     fetch("/api/jobs?limit=5").then((r) => r.json()).then((d) => setRecentJobs(d.jobs || []));
-    if (session?.user.role === "admin") {
+    if (session.user.role === "admin") {
       fetch("/api/admin/stats").then((r) => r.json()).then(setStats);
     }
-    if (session) {
-      fetch("/api/engagements").then(r => r.json()).then(data => {
-        const engs = data.engagements || [];
-        const active = engs.filter((e: Record<string, unknown>) =>
-          ["active", "negotiating", "pending_deposit"].includes(e.status as string)
-        );
-        setEngagementCount(active.length);
-        const userId = session.user.id;
-        const isCompany = session.user.role === "industry";
-        const hasAction = engs.some((e: Record<string, unknown>) => {
-          if (e.status === "negotiating" && (e as Record<string, unknown>).proposedBy && (e as Record<string, unknown>).proposedBy !== userId) return true;
-          if (e.status === "active") {
-            const milestones = (e as Record<string, unknown>).milestones as Array<Record<string, unknown>> || [];
-            if (isCompany && milestones.some(m => m.status === "under_review")) return true;
-            if (!isCompany && milestones.some(m => m.status === "pending" || m.status === "revision_requested")) return true;
-          }
-          return false;
-        });
-        setAwaitingAction(hasAction);
+    fetch("/api/engagements").then(r => r.json()).then(data => {
+      const engs = data.engagements || [];
+      const active = engs.filter((e: Record<string, unknown>) =>
+        ["active", "negotiating", "pending_deposit"].includes(e.status as string)
+      );
+      setEngagementCount(active.length);
+      const userId = session.user.id;
+      const isCompany = session.user.role === "industry";
+      const hasAction = engs.some((e: Record<string, unknown>) => {
+        if (e.status === "negotiating" && (e as Record<string, unknown>).proposedBy && (e as Record<string, unknown>).proposedBy !== userId) return true;
+        if (e.status === "active") {
+          const milestones = (e as Record<string, unknown>).milestones as Array<Record<string, unknown>> || [];
+          if (isCompany && milestones.some(m => m.status === "under_review")) return true;
+          if (!isCompany && milestones.some(m => m.status === "pending" || m.status === "revision_requested")) return true;
+        }
+        return false;
       });
-    }
-  }, [session]);
+      setAwaitingAction(hasAction);
+    });
+  }, [session, status, router]);
+
+  if (status === "loading") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-pulse">
+        <div className="mb-8">
+          <div className="h-8 w-64 bg-slate-200 rounded-lg mb-2" />
+          <div className="h-4 w-96 bg-slate-100 rounded" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-20 bg-slate-100 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <div className="h-6 w-32 bg-slate-200 rounded mb-4" />
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-20 bg-slate-100 rounded-xl" />
+            ))}
+          </div>
+          <div className="space-y-3">
+            <div className="h-6 w-48 bg-slate-200 rounded mb-4" />
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-16 bg-slate-100 rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!session) return null;
 
