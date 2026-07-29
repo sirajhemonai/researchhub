@@ -22,46 +22,18 @@ const DIAGRAMS: Diagram[] = [
     caption:
       "Figure 1: Layered system architecture showing request flow left-to-right from the browser through the presentation, API, authentication, ORM, and data layers.",
     chart: `flowchart LR
-  subgraph CLIENT["CLIENT LAYER — Browser"]
-    direction TB
-    U["Users — 5 Roles<br/>Student · Researcher<br/>Industry · Government · Admin"]
-  end
-
-  subgraph PRES["PRESENTATION LAYER<br/>Next.js 16 · React 19 · Tailwind v4"]
-    direction TB
-    P1["Dashboard"]
-    P2["Problems"]
-    P3["Jobs"]
-    P4["Talent"]
-    P5["Messages"]
-    P6["Admin Panel"]
-  end
-
-  subgraph APIL["APPLICATION LAYER<br/>Route Handlers (/api/*)"]
-    direction TB
-    A1["/api/problems"]
-    A2["/api/submissions"]
-    A3["/api/engagements"]
-    A4["/api/jobs"]
-    A5["/api/messages"]
-    A6["/api/admin"]
-  end
-
-  subgraph SVC["AUTH & BUSINESS LOGIC LAYER"]
-    direction TB
-    AU["NextAuth.js<br/>JWT · bcrypt · RBAC"]
-    BL["Trust Score · Verification<br/>Validation (Zod)"]
-  end
-
-  ORM["DATA ACCESS LAYER — Prisma ORM (Prisma Client)"]
-
-  DB[("DATA LAYER — PostgreSQL (Neon)<br/>15 Models: User · Profile · Problem · Submission<br/>Engagement · Milestone · Message · Job · Dispute<br/>Certificate · Rating · Verification · FraudReport")]
+  U["<b>CLIENT LAYER</b><br/>Browser<br/>5 User Roles:<br/>Student · Researcher<br/>Industry · Government · Admin"]
+  PRES["<b>PRESENTATION LAYER</b><br/>Next.js 16 · React 19 · Tailwind v4<br/>Dashboard · Problems · Jobs<br/>Talent · Messages · Admin"]
+  API["<b>APPLICATION LAYER</b><br/>Next.js Route Handlers (/api/*)<br/>problems · submissions · engagements<br/>jobs · messages · admin"]
+  SVC["<b>AUTH &amp; BUSINESS LOGIC</b><br/>NextAuth.js · JWT · bcrypt · RBAC<br/>Trust Score · Verification<br/>Validation (Zod)"]
+  ORM["<b>DATA ACCESS LAYER</b><br/>Prisma ORM<br/>Prisma Client"]
+  DB[("<b>DATA LAYER</b><br/>PostgreSQL (Neon)<br/>15 Models: User · Profile · Problem<br/>Submission · Engagement · Milestone<br/>Message · Job · Dispute · Certificate<br/>Rating · Verification · FraudReport")]
 
   U -->|HTTPS| PRES
-  PRES -->|fetch / REST JSON| APIL
-  APIL --> SVC
+  PRES -->|fetch / REST JSON| API
+  API --> SVC
   SVC --> ORM
-  APIL --> ORM
+  API --> ORM
   ORM -->|SQL| DB`,
   },
   {
@@ -131,17 +103,30 @@ const DIAGRAMS: Diagram[] = [
   GOV(["Government"])
   ADM(["Admin"])
 
-  subgraph SYSTEM["ResearchBridge BD"]
+  subgraph SUB1["Problems &amp; Submissions"]
+    direction TB
     UC1(["Post Problem"])
     UC2(["Submit Solution"])
     UC3(["Shortlist Candidate"])
+  end
+
+  subgraph SUB2["Engagement Lifecycle"]
+    direction TB
     UC4(["Create Engagement"])
     UC5(["Track Milestones"])
+    UC10(["Issue Certificate"])
+  end
+
+  subgraph SUB3["Communication &amp; Jobs"]
+    direction TB
     UC6(["Exchange Messages"])
     UC7(["Post / Apply Job"])
+  end
+
+  subgraph SUB4["Governance (Admin)"]
+    direction TB
     UC8(["Verify Company"])
     UC9(["Resolve Dispute"])
-    UC10(["Issue Certificate"])
   end
 
   IND --> UC1
@@ -153,8 +138,6 @@ const DIAGRAMS: Diagram[] = [
   STU --> UC5
   IND --> UC5
   STU --> UC6
-  IND --> UC6
-  RES --> UC6
   IND --> UC7
   STU --> UC7
   ADM --> UC8
@@ -192,14 +175,16 @@ const DIAGRAMS: Diagram[] = [
     title: "Trust & Verification Model",
     caption:
       "Figure 5: How platform integrity is enforced — the verification pipeline, trust-score inputs, and fraud-handling loop.",
-    chart: `flowchart TB
+    chart: `flowchart LR
   subgraph VERIFY["Verification Pipeline"]
+    direction TB
     V1["User submits<br/>documents"] --> V2{"Admin<br/>review"}
     V2 -->|Approve| V3["Verified Badge"]
     V2 -->|Reject| V4["Rejected"]
   end
 
   subgraph TRUST["Trust Score Engine"]
+    direction TB
     T1["Verification status"] --> TS(("Trust<br/>Score"))
     T2["Completed engagements"] --> TS
     T3["Project ratings"] --> TS
@@ -207,13 +192,14 @@ const DIAGRAMS: Diagram[] = [
   end
 
   subgraph FRAUD["Fraud Handling"]
+    direction TB
     F1["User files<br/>Fraud Report"] --> F2{"Admin<br/>Action"}
     F2 -->|Valid| F3["Status override /<br/>score penalty"]
     F2 -->|Dismiss| F4["No change"]
   end
 
-  V3 --> T1
-  F3 --> T4`,
+  VERIFY --> TRUST
+  FRAUD --> TRUST`,
   },
 ];
 
