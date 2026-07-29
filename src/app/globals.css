@@ -29,3 +29,36 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
+
+/* ---- Documentation / diagram print layout ---- */
+.diagram-page {
+  break-inside: avoid;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 14mm;
+  }
+
+  /* Hide global app chrome so only the diagrams print */
+  nav,
+  footer {
+    display: none !important;
+  }
+
+  .diagram-page {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .diagram-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .mermaid-container svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
