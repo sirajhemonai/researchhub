@@ -20,14 +20,15 @@ const DIAGRAMS: Diagram[] = [
     no: 1,
     title: "System Architecture (High-Level)",
     caption:
-      "Figure 1: Layered system architecture showing request flow from the browser through the presentation, API, authentication, ORM, and data layers.",
-    chart: `flowchart TB
+      "Figure 1: Layered system architecture showing request flow left-to-right from the browser through the presentation, API, authentication, ORM, and data layers.",
+    chart: `flowchart LR
   subgraph CLIENT["CLIENT LAYER — Browser"]
-    U["Users — 5 Roles<br/>Student · Researcher · Industry · Government · Admin"]
+    direction TB
+    U["Users — 5 Roles<br/>Student · Researcher<br/>Industry · Government · Admin"]
   end
 
-  subgraph PRES["PRESENTATION LAYER — Next.js 16 App Router · React 19 · Tailwind v4"]
-    direction LR
+  subgraph PRES["PRESENTATION LAYER<br/>Next.js 16 · React 19 · Tailwind v4"]
+    direction TB
     P1["Dashboard"]
     P2["Problems"]
     P3["Jobs"]
@@ -36,8 +37,8 @@ const DIAGRAMS: Diagram[] = [
     P6["Admin Panel"]
   end
 
-  subgraph APIL["APPLICATION LAYER — Next.js Route Handlers (/api/*)"]
-    direction LR
+  subgraph APIL["APPLICATION LAYER<br/>Route Handlers (/api/*)"]
+    direction TB
     A1["/api/problems"]
     A2["/api/submissions"]
     A3["/api/engagements"]
@@ -47,7 +48,7 @@ const DIAGRAMS: Diagram[] = [
   end
 
   subgraph SVC["AUTH & BUSINESS LOGIC LAYER"]
-    direction LR
+    direction TB
     AU["NextAuth.js<br/>JWT · bcrypt · RBAC"]
     BL["Trust Score · Verification<br/>Validation (Zod)"]
   end
